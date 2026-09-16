@@ -11,7 +11,7 @@
 
 ## 验证
 
-- `python -m unittest discover -s VideoImageOverlay\tests -p test_*.py -v`：16/16 通过，涵盖既有扫描、序号、音频、覆盖和 GUI 回归，以及 settings 读写/损坏回退/原子替换、冻结/开发基准、选区跨分辨率恢复、隐藏窗口与非交互调用。
+- `python -m unittest discover -s VideoImageOverlay\tests -p test_*.py -v`：17/17 通过，涵盖既有扫描、序号、音频、覆盖、取消和 GUI 回归，以及 settings 读写/损坏回退/原子替换、冻结/开发基准、选区跨分辨率恢复、隐藏窗口与非交互调用。
 - 最终 `VideoImageOverlay/VideoImageOverlay.exe` 在无系统 FFmpeg PATH 下成功处理合成视频；日志确认“FFmpeg 来源：PyInstaller 内置组件”，输出为 H.264/AAC MP4，源视频 SHA-256 未变化。
 
 ## 状态

@@ -88,6 +88,16 @@ class EngineTests(unittest.TestCase):
             self.assertTrue(output.exists())
             self.assertTrue(any("改为 AAC" in message for message in messages))
 
+    def test_cancelled_batch_marks_remaining_videos_without_processing(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            directory = Path(raw)
+            videos = [directory / "first.mp4", directory / "second.mp4"]
+            processor = VideoProcessor(MediaTools(Path("ffmpeg.exe"), Path("ffprobe.exe"), "测试"))
+            processor.cancel()
+            summary = processor.process_batch(
+                directory / "image.png", videos, directory / "output", Region(0, 0, 1, 1), lambda *_: None
+            )
+        self.assertEqual(summary, {"success": [], "failed": [], "cancelled": ["first.mp4", "second.mp4"]})
 
 if __name__ == "__main__":
     unittest.main()

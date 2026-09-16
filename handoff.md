@@ -18,7 +18,7 @@
 
 - 版本 / 代号：v0.2.0 / portable-state。
 - 发布：仅本地构建，未上传、未生成 ZIP、未发布远程；`VideoImageOverlay/VideoImageOverlay.exe` SHA-256：`DF5F498EC4637F0334C6F8AD14E475A131259AAA041127D20DDF97EDDCFBCA80`。
-- Git：仓库根为 `E:\Ai\Ai\视频自动剪辑`；本轮完成后创建包含 v0.2.0 的本地提交，不配置远程、不 push。
+- Git：仓库根为 `E:\Ai\Ai\视频自动剪辑`；已创建本地 v0.2.0 提交 `02c5b088b9b9aaf8c045e7551b3d9f20ec267a25`；无远程配置、未 push。
 
 ## 下一步
 

@@ -1,0 +1,11 @@
+VideoImageOverlay/build/
+VideoImageOverlay/dist/
+VideoImageOverlay/.build-tools/
+VideoImageOverlay/.build-cache/
+VideoImageOverlay/third_party/ffmpeg/
+VideoImageOverlay/__pycache__/
+VideoImageOverlay/video_image_overlay/__pycache__/
+VideoImageOverlay/tests/__pycache__/
+VideoImageOverlay/.verification/
+*.pyc
+*.spec

@@ -10,6 +10,7 @@ from PIL import Image, ImageTk
 
 from .engine import Region, ToolResolver, VideoProcessor, extract_first_frame, scan_videos, temporary_frame_path
 from .gui_math import PreviewGeometry
+from .settings import AppSettings, SettingsStore
 
 
 class VideoImageOverlayApp(ttk.Frame):
@@ -19,24 +20,36 @@ class VideoImageOverlayApp(ttk.Frame):
     def __init__(self, root: tk.Tk) -> None:
         super().__init__(root, padding=12)
         self.root = root
-        self.root.title("VideoImageOverlay v0.1.0")
+        self.startup_messages: list[str] = []
+        self.settings_store = SettingsStore()
+        self.saved_settings = self.settings_store.load(self.startup_messages.append)
+        self._settings_ready = False
+        self._save_after: str | None = None
+        self.root.title("VideoImageOverlay v0.2.0")
         self.root.minsize(920, 760)
+        self.root.geometry(f"{self.saved_settings.window_width}x{self.saved_settings.window_height}")
         self.grid(sticky="nsew")
         root.columnconfigure(0, weight=1)
         root.rowconfigure(0, weight=1)
-        self.source_var = tk.StringVar()
-        self.destination_var = tk.StringVar()
-        self.image_var = tk.StringVar()
+        self.source_var = tk.StringVar(value=self.saved_settings.source_path)
+        self.destination_var = tk.StringVar(value=self.saved_settings.destination_path)
+        self.image_var = tk.StringVar(value=self.saved_settings.image_path)
         self.status_var = tk.StringVar(value="请选择源文件夹、目标文件夹和替换图片。")
         self.progress_var = tk.DoubleVar(value=0)
         self.preview_geometry: PreviewGeometry | None = None
         self.preview_photo: ImageTk.PhotoImage | None = None
         self.drag_mode: str | None = None
         self.drag_anchor = (0.0, 0.0)
+        self.region = Region(*self.saved_settings.region)
         self.rectangle = [170.0, 100.0, 390.0, 220.0]
         self.events: queue.Queue[tuple[str, object]] = queue.Queue()
         self.processor: VideoProcessor | None = None
         self._build()
+        self.root.protocol("WM_DELETE_WINDOW", self.on_close)
+        self.root.bind("<Configure>", self.on_window_configure)
+        for variable in (self.source_var, self.destination_var, self.image_var):
+            variable.trace_add("write", self.on_path_changed)
+        self.root.after_idle(self.restore_startup_state)
 
     def _build(self) -> None:
         form = ttk.LabelFrame(self, text="输入与输出", padding=8)
@@ -71,31 +84,93 @@ class VideoImageOverlayApp(ttk.Frame):
         self.log.see("end")
         self.log.configure(state="disabled")
 
+    def restore_startup_state(self) -> None:
+        if self.saved_settings.window_state == "zoomed":
+            self.root.state("zoomed")
+        for message in self.startup_messages:
+            self.write_log(message)
+        self._settings_ready = True
+        source = Path(self.source_var.get()) if self.source_var.get() else None
+        if source and source.is_dir():
+            self.load_preview()
+        elif source:
+            message = f"已恢复源路径，但路径不可用：{source}"
+            self.status_var.set(message)
+            self.write_log(message)
+        self.persist_settings()
+
+    def collect_settings(self) -> AppSettings:
+        state = self.root.state()
+        if state not in {"normal", "zoomed"}:
+            state = "normal"
+        return AppSettings(
+            source_path=self.source_var.get(),
+            destination_path=self.destination_var.get(),
+            image_path=self.image_var.get(),
+            region=(self.region.x, self.region.y, self.region.width, self.region.height),
+            position_mode="normalized",
+            window_width=max(640, self.root.winfo_width()),
+            window_height=max(480, self.root.winfo_height()),
+            window_state=state,
+        )
+
+    def persist_settings(self) -> None:
+        if not self._settings_ready:
+            return
+        try:
+            self.settings_store.save(self.collect_settings())
+        except OSError as error:
+            self.write_log(f"无法保存 settings.json：{error}")
+
+    def schedule_persist(self) -> None:
+        if not self._settings_ready:
+            return
+        if self._save_after:
+            self.root.after_cancel(self._save_after)
+        self._save_after = self.root.after(300, self.persist_settings)
+
+    def on_path_changed(self, *_: object) -> None:
+        self.schedule_persist()
+
+    def on_window_configure(self, event: tk.Event) -> None:
+        if event.widget == self.root and self.root.state() != "iconic":
+            self.schedule_persist()
+
+    def on_close(self) -> None:
+        self.persist_settings()
+        self.root.destroy()
+
     def choose_source(self) -> None:
         selected = filedialog.askdirectory(title="选择只包含待处理视频的源文件夹")
         if selected:
             self.source_var.set(selected)
+            self.persist_settings()
             self.load_preview()
 
     def choose_destination(self) -> None:
         selected = filedialog.askdirectory(title="选择输出文件夹")
         if selected:
             self.destination_var.set(selected)
+            self.persist_settings()
 
     def choose_image(self) -> None:
         selected = filedialog.askopenfilename(title="选择替换图片", filetypes=[("图片", "*.png *.jpg *.jpeg *.bmp *.webp"), ("所有文件", "*.*")])
         if selected:
             self.image_var.set(selected)
+            self.persist_settings()
 
     def load_preview(self) -> None:
         source = Path(self.source_var.get())
         if not source.is_dir():
             return
+        frame: Path | None = None
         try:
             tools = ToolResolver.resolve()
             videos = scan_videos(source)
             if not videos:
-                self.status_var.set("源文件夹第一层没有支持的视频。")
+                message = "源文件夹第一层没有支持的视频。"
+                self.status_var.set(message)
+                self.write_log(message)
                 return
             frame = temporary_frame_path()
             extract_first_frame(tools, videos[0], frame)
@@ -103,16 +178,22 @@ class VideoImageOverlayApp(ttk.Frame):
                 original = image.convert("RGB")
                 geometry = PreviewGeometry(original.width, original.height, self.CANVAS_WIDTH, self.CANVAS_HEIGHT)
                 displayed = original.resize((round(original.width * geometry.scale), round(original.height * geometry.scale)), Image.Resampling.LANCZOS)
-            frame.unlink(missing_ok=True)
             self.preview_geometry = geometry
             self.preview_photo = ImageTk.PhotoImage(displayed)
             self.canvas.delete("all")
             self.canvas.create_image(geometry.offset_x, geometry.offset_y, anchor="nw", image=self.preview_photo, tags="preview")
+            self.rectangle = list(geometry.from_region(self.region))
             self.draw_region()
-            self.status_var.set(f"预览：{videos[0].name}；找到 {len(videos)} 个视频。工具来源：{tools.source}。")
-            self.write_log(self.status_var.get())
+            message = f"预览：{videos[0].name}；找到 {len(videos)} 个视频。工具来源：{tools.source}。"
+            self.status_var.set(message)
+            self.write_log(message)
         except Exception as error:  # noqa: BLE001
-            messagebox.showerror("无法加载预览", str(error))
+            message = f"无法加载预览：{error}"
+            self.status_var.set(message)
+            self.write_log(message)
+        finally:
+            if frame:
+                frame.unlink(missing_ok=True)
 
     def draw_region(self) -> None:
         self.canvas.delete("region")
@@ -148,13 +229,16 @@ class VideoImageOverlayApp(ttk.Frame):
         if self.preview_geometry:
             left, top, right, bottom = self.rectangle
             self.rectangle = [min(left, right), min(top, bottom), max(left, right), max(top, bottom)]
+            self.region = self.preview_geometry.to_region(*self.rectangle)
+            self.rectangle = list(self.preview_geometry.from_region(self.region))
             self.draw_region()
+            self.persist_settings()
         self.drag_mode = None
 
     def selected_region(self) -> Region:
         if not self.preview_geometry:
             raise ValueError("请先选择源文件夹以加载首帧预览。")
-        return self.preview_geometry.to_region(*self.rectangle)
+        return self.region
 
     def start(self) -> None:
         source = Path(self.source_var.get())
@@ -174,27 +258,24 @@ class VideoImageOverlayApp(ttk.Frame):
             tools = ToolResolver.resolve()
             region = self.selected_region()
         except Exception as error:  # noqa: BLE001
-            messagebox.showerror("无法开始", str(error))
+            self.status_var.set(f"无法开始：{error}")
+            self.write_log(self.status_var.get())
             return
         self.processor = VideoProcessor(tools, logger=lambda text: self.events.put(("log", text)))
         self.start_button.configure(state="disabled")
         self.cancel_button.configure(state="normal")
         self.progress_var.set(0)
+        self.persist_settings()
         self.write_log(f"开始处理 {len(videos)} 个视频；FFmpeg 来源：{tools.source}。")
-        thread = threading.Thread(target=self._worker, args=(image, videos, destination, region), daemon=True)
-        thread.start()
+        threading.Thread(target=self._worker, args=(image, videos, destination, region), daemon=True).start()
         self.root.after(80, self.poll_events)
 
     def _worker(self, image: Path, videos: list[Path], destination: Path, region: Region) -> None:
         assert self.processor
-        summary = self.processor.process_batch(
-            image, videos, destination, region,
-            lambda current, total, video, state: self.events.put(("progress", (current, total, video.name, state))),
-        )
+        summary = self.processor.process_batch(image, videos, destination, region, lambda current, total, video, state: self.events.put(("progress", (current, total, video.name, state))))
         self.events.put(("finished", summary))
 
     def poll_events(self) -> None:
-        pending = False
         while True:
             try:
                 kind, payload = self.events.get_nowait()
@@ -217,8 +298,7 @@ class VideoImageOverlayApp(ttk.Frame):
                     for item in summary[category]:
                         self.write_log(f"[{category}] {item}")
                 return
-            pending = True
-        if self.processor and (pending or self.start_button.instate(["disabled"])):
+        if self.processor and self.start_button.instate(["disabled"]):
             self.root.after(80, self.poll_events)
 
     def cancel(self) -> None:

@@ -7,5 +7,11 @@ VideoImageOverlay/__pycache__/
 VideoImageOverlay/video_image_overlay/__pycache__/
 VideoImageOverlay/tests/__pycache__/
 VideoImageOverlay/.verification/
+VideoImageOverlay/.verification*/
 *.pyc
 *.spec
+VideoImageOverlay/VideoImageOverlay.exe
+VideoImageOverlay/settings.json
+VideoImageOverlay/素材/
+VideoImageOverlay/替换图片/
+VideoImageOverlay/成品/

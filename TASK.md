@@ -1,8 +1,8 @@
-# 当前任务：VideoImageOverlay v0.1.0
+# 当前任务：VideoImageOverlay v0.2.0
 
 ## 目标
 
-构建可直接运行的本地 Release 程序，批量将源文件夹第一层视频的固定区域覆盖为指定图片，并输出到不同目标文件夹。
+构建可直接运行的 v0.2.0 便携 EXE，保存最近路径、选区和窗口状态，并在无弹窗媒体处理下批量输出视频。
 
 ## 边界
 
@@ -14,6 +14,6 @@
 
 - 单文件 EXE 经 PyInstaller `--add-binary` 内置 FFmpeg 与 FFprobe，并在无系统 FFmpeg 环境成功处理合成视频。
 - 支持指定扩展名、同名自动序号、首帧预览与框选、全程覆盖、音频复制/AAC 回退、取消和结果汇总。
-- 已完成单元、分支、集成与 GUI 回归验证；提供 SHA-256、版本与本地 Git 提交哈希。
+- 已完成持久化、无窗口媒体调用、单元、集成与 GUI 回归验证；最终交付物仅为 `VideoImageOverlay/VideoImageOverlay.exe`。
 
 > 执行状态与证据写在 `handoff.md`。

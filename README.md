@@ -6,12 +6,12 @@
 
 - 项目名称 / 定位：VideoImageOverlay，本地离线批量视频图片覆盖工具。
 - 技术栈：Python 3.11、Tkinter、Pillow、FFmpeg 9.0.1 essentials、PyInstaller。
-- 源码：`VideoImageOverlay/video_image_overlay/`；测试：`VideoImageOverlay/tests/`；产物：`VideoImageOverlay/dist/`。
+- 源码：`VideoImageOverlay/video_image_overlay/`；测试：`VideoImageOverlay/tests/`；产物：`VideoImageOverlay/VideoImageOverlay.exe`。
 - 构建：在 `VideoImageOverlay` 内执行 `powershell -ExecutionPolicy Bypass -File .\build_release.ps1 -Clean`。
 - 测试：设置 `PYTHONPATH=VideoImageOverlay` 后运行 `python -m unittest discover -s VideoImageOverlay\tests -v`。
-- 发布路径：仅本地 `VideoImageOverlay/dist/VideoImageOverlay.exe`；不上传、不打包 ZIP、不发布远程。
+- 发布路径：仅本地 `VideoImageOverlay/VideoImageOverlay.exe`；不上传、不打包 ZIP、不发布远程。
 - 只读输入：用户选择的源视频文件夹和外部资源库。
-- 版本规则：见 `VERSION.md`，当前固定为 `v0.1.0`。
+- 版本规则：见 `VERSION.md`，当前固定为 `v0.2.0`。
 
 ## 使用方式
 
@@ -21,3 +21,5 @@
 4. 点击“开始批量处理”。程序将图片等比裁剪铺满选区，输出同名 MP4；冲突时自动追加序号。
 
 程序优先从 EXE 同目录查找 FFmpeg/FFprobe，再使用 PyInstaller 内置组件，最后才回退系统 PATH；实际来源会写入日志。
+
+程序在 EXE 同目录保存便携 settings.json，记录最近路径、归一化选区和窗口状态；该文件不会纳入 Git。处理期间不会弹出媒体工具控制台或模态进度窗口。

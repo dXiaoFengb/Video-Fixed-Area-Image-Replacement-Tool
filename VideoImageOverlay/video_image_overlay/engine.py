@@ -15,6 +15,16 @@ from typing import Callable
 SUPPORTED_EXTENSIONS = {".mp4", ".mov", ".mkv", ".avi", ".wmv", ".webm", ".m4v"}
 
 
+def subprocess_window_options() -> dict[str, object]:
+    """让 GUI 程序调用的媒体工具不显示控制台窗口。"""
+    if os.name != "nt":
+        return {}
+    startupinfo = subprocess.STARTUPINFO()
+    startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+    startupinfo.wShowWindow = subprocess.SW_HIDE
+    return {"creationflags": subprocess.CREATE_NO_WINDOW, "startupinfo": startupinfo}
+
+
 @dataclass(frozen=True)
 class Region:
     """相对于参考画面的归一化选区。"""
@@ -84,10 +94,12 @@ def probe_video(tools: MediaTools, video_path: Path) -> dict:
     result = subprocess.run(
         [str(tools.ffprobe), "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height,r_frame_rate", "-of", "json", str(video_path)],
         capture_output=True,
+        stdin=subprocess.DEVNULL,
         text=True,
         encoding="utf-8",
         errors="replace",
         check=True,
+        **subprocess_window_options(),
     )
     streams = json.loads(result.stdout).get("streams", [])
     if not streams:
@@ -97,11 +109,13 @@ def probe_video(tools: MediaTools, video_path: Path) -> dict:
 
 def extract_first_frame(tools: MediaTools, video_path: Path, destination: Path) -> None:
     result = subprocess.run(
-        [str(tools.ffmpeg), "-y", "-v", "error", "-i", str(video_path), "-frames:v", "1", str(destination)],
+        [str(tools.ffmpeg), "-nostdin", "-y", "-v", "error", "-i", str(video_path), "-frames:v", "1", str(destination)],
         capture_output=True,
+        stdin=subprocess.DEVNULL,
         text=True,
         encoding="utf-8",
         errors="replace",
+        **subprocess_window_options(),
     )
     if result.returncode != 0:
         raise RuntimeError(result.stderr.strip() or "无法提取首帧")
@@ -132,6 +146,7 @@ class VideoProcessor:
                 text=True,
                 encoding="utf-8",
                 errors="replace",
+                **subprocess_window_options(),
             )
             process = self._process
         _, stderr = process.communicate()
@@ -149,7 +164,7 @@ class VideoProcessor:
             f"crop={width}:{height}[overlay];[1:v][overlay]overlay={x}:{y}:format=auto[video]"
         )
         return [
-            str(self.tools.ffmpeg), "-y", "-v", "error", "-loop", "1", "-i", str(image), "-i", str(video),
+            str(self.tools.ffmpeg), "-nostdin", "-y", "-v", "error", "-loop", "1", "-i", str(image), "-i", str(video),
             "-filter_complex", filter_graph, "-map", "[video]", "-map", "1:a?", "-c:v", "libx264", "-crf", "18",
             "-pix_fmt", "yuv420p", "-movflags", "+faststart", "-c:a", audio_codec, "-shortest", str(output),
         ]

@@ -30,3 +30,10 @@ class PreviewGeometry:
         right_value = max(x, min(1, (right - self.offset_x) / (self.source_width * self.scale)))
         bottom_value = max(y, min(1, (bottom - self.offset_y) / (self.source_height * self.scale)))
         return Region(x, y, max(0.01, right_value - x), max(0.01, bottom_value - y))
+
+    def from_region(self, region: Region) -> tuple[float, float, float, float]:
+        left = self.offset_x + region.x * self.source_width * self.scale
+        top = self.offset_y + region.y * self.source_height * self.scale
+        right = self.offset_x + min(1, region.x + region.width) * self.source_width * self.scale
+        bottom = self.offset_y + min(1, region.y + region.height) * self.source_height * self.scale
+        return left, top, right, bottom

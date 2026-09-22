@@ -71,6 +71,65 @@ class GuiSmokeTests(unittest.TestCase):
             if root.winfo_exists():
                 app.on_close()
 
+    def test_large_preview_wheel_keeps_mouse_anchor_and_syncs_slider(self) -> None:
+        root = tk.Tk()
+        root.withdraw()
+        app = VideoImageOverlayApp(root)
+        app.original_frame = Image.new("RGB", (1200, 800), "blue")
+        try:
+            root.update()
+            app.open_preview()
+            root.update()
+            app._set_preview_zoom(2.0, persist=False)
+            app._render_large()
+            surface = app.preview_surface
+            self.assertIsNotNone(surface)
+            canvas = surface.canvas
+            canvas.xview_moveto(0.35)
+            canvas.yview_moveto(0.25)
+            root.update_idletasks()
+            event = type("Event", (), {"delta": 120, "x": 180, "y": 130})()
+            old_width = surface.geometry.canvas_width
+            old_height = surface.geometry.canvas_height
+            old_source = (canvas.canvasx(event.x) / old_width, canvas.canvasy(event.y) / old_height)
+            app._on_wheel(surface, event)
+            root.update_idletasks()
+            root.update()
+            new_source = (canvas.canvasx(event.x) / surface.geometry.canvas_width, canvas.canvasy(event.y) / surface.geometry.canvas_height)
+            self.assertAlmostEqual(old_source[0], new_source[0], places=3)
+            self.assertAlmostEqual(old_source[1], new_source[1], places=3)
+            self.assertAlmostEqual(app.preview_scale_var.get(), 2.12, places=2)
+            self.assertIn("缩放", app.preview_zoom_label_var.get())
+            app._on_preview_scale("3.0")
+            self.assertAlmostEqual(app._zoom_value(), 3.0, places=4)
+            self.assertAlmostEqual(app.preview_scale_var.get(), 3.0, places=4)
+        finally:
+            if root.winfo_exists():
+                app.on_close()
+
+    def test_large_preview_fit_is_independent_and_reload_resets(self) -> None:
+        root = tk.Tk()
+        root.withdraw()
+        app = VideoImageOverlayApp(root)
+        app.original_frame = Image.new("RGB", (640, 360), "blue")
+        try:
+            root.update()
+            app.open_preview()
+            root.update()
+            app._set_preview_zoom(None, persist=False)
+            self.assertIsNone(app._zoom_value())
+            self.assertEqual(app.preview_zoom_label_var.get(), "适应窗口")
+            app._on_wheel(app.preview_surface, type("Event", (), {"delta": 120, "x": 80, "y": 70})())
+            root.update_idletasks()
+            self.assertIsNotNone(app._zoom_value())
+            self.assertGreaterEqual(app._zoom_value(), 0.5)
+            app._set_preview_zoom(2.0, persist=False)
+            app.source_var.set("")
+            app.load_preview()
+            self.assertIsNone(app._zoom_value())
+        finally:
+            if root.winfo_exists():
+                app.on_close()
     def test_right_pan_wheel_and_magnifier(self) -> None:
         root = tk.Tk()
         root.withdraw()

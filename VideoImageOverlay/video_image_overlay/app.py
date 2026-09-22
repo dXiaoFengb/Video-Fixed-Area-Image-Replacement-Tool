@@ -50,7 +50,7 @@ class VideoImageOverlayApp(ttk.Frame):
         self._main_render_pending = False
         self._rendering_preview = False
         self._last_canvas_size: tuple[int, int] | None = None
-        self.root.title("VideoImageOverlay v0.4.1")
+        self.root.title("VideoImageOverlay v0.4.2")
         try:
             self.root.iconbitmap(str(app_icon_path()))
         except tk.TclError:
@@ -76,6 +76,8 @@ class VideoImageOverlayApp(ttk.Frame):
         self.preview_window: tk.Toplevel | None = None
         self.preview_surface: PreviewSurface | None = None
         self.preview_zoom_var = tk.StringVar(value="fit" if self.saved_settings.preview_zoom is None else f"{self.saved_settings.preview_zoom:.2f}")
+        self.preview_scale_var: tk.DoubleVar | None = None
+        self.preview_zoom_label_var = tk.StringVar(value="适应窗口")
         self.preset_button: ttk.Button | None = None
         self.preview_fullscreen = False
         self._build()
@@ -249,6 +251,7 @@ class VideoImageOverlayApp(ttk.Frame):
         self.status_var.set(f"常用素材：新增 {len(result.installed)}，跳过 {len(result.skipped)}，失败 {len(result.failed)}。")
 
     def load_preview(self) -> None:
+        self._set_preview_zoom(None, persist=False)
         source = Path(self.source_var.get())
         if not source.is_dir():
             return
@@ -469,7 +472,7 @@ class VideoImageOverlayApp(ttk.Frame):
         self.columnconfigure(0, weight=1); self.rowconfigure(2, weight=1)
         head=ttk.Frame(self); head.grid(row=0,column=0,sticky="ew",pady=(0,12)); head.columnconfigure(0,weight=1)
         ttk.Label(head,text="VideoImageOverlay",style="Title.TLabel").grid(row=0,column=0,sticky="w")
-        ttk.Label(head,text="固定区域图片覆盖 · v0.4.1",style="Subtitle.TLabel").grid(row=1,column=0,sticky="w")
+        ttk.Label(head,text="固定区域图片覆盖 · v0.4.2",style="Subtitle.TLabel").grid(row=1,column=0,sticky="w")
         form=ttk.LabelFrame(self,text="输入与输出",style="Card.TLabelframe"); form.grid(row=1,column=0,sticky="ew"); form.columnconfigure(1,weight=1)
         for row,(label,var,action) in enumerate((("源文件夹",self.source_var,self.choose_source),("目标文件夹",self.destination_var,self.choose_destination),("替换图片",self.image_var,self.choose_image))):
             ttk.Label(form,text=label).grid(row=row,column=0,padx=(0,12),pady=6,sticky="w"); ttk.Entry(form,textvariable=var).grid(row=row,column=1,pady=6,sticky="ew"); ttk.Button(form,text="选择",command=action).grid(row=row,column=2,padx=(10,0),pady=6)
@@ -489,10 +492,29 @@ class VideoImageOverlayApp(ttk.Frame):
         c=surface.canvas; c.bind("<ButtonPress-1>",lambda e:self._on_press(surface,e)); c.bind("<B1-Motion>",lambda e:self._on_drag(surface,e)); c.bind("<ButtonRelease-1>",lambda e:self._on_release(surface,e)); c.bind("<ButtonPress-3>",lambda e:self._on_pan_press(surface,e)); c.bind("<B3-Motion>",lambda e:self._on_pan_drag(surface,e)); c.bind("<ButtonRelease-3>",lambda e:self._on_pan_release(surface,e)); c.bind("<MouseWheel>",lambda e:self._on_wheel(surface,e)); c.bind("<Button-4>",lambda e:self._on_wheel(surface,e,1)); c.bind("<Button-5>",lambda e:self._on_wheel(surface,e,-1)); c.bind("<Configure>",lambda e:self._on_canvas_configure(surface,e))
 
     def _zoom_value(self) -> float | None:
-        value=self.preview_zoom_var.get().strip().lower()
-        if value in ("","fit"): return None
-        try: return max(.5,min(4.0,float(value.rstrip("%"))/(100 if value.endswith("%") else 1)))
-        except ValueError: return None
+        value = self.preview_zoom_var.get().strip().lower()
+        if value in ("", "fit"):
+            return None
+        try:
+            numeric = float(value.rstrip("%")) / (100 if value.endswith("%") else 1)
+        except ValueError:
+            return None
+        return max(0.5, min(4.0, numeric))
+
+    def _set_preview_zoom(self, value: float | None, *, persist: bool = True) -> None:
+        if value is None:
+            self.preview_zoom_var.set("fit")
+            if self.preview_scale_var is not None:
+                self.preview_scale_var.set(1.0)
+            self.preview_zoom_label_var.set("适应窗口")
+        else:
+            numeric = max(0.5, min(4.0, float(value)))
+            self.preview_zoom_var.set(f"{numeric:.4f}")
+            if self.preview_scale_var is not None:
+                self.preview_scale_var.set(numeric)
+            self.preview_zoom_label_var.set(f"缩放 {round(numeric * 100):.0f}%")
+        if persist:
+            self.schedule_persist()
 
     def collect_settings(self) -> AppSettings:
         state=self.root.state() if self.root.state() in {"normal","zoomed"} else "normal"
@@ -509,9 +531,25 @@ class VideoImageOverlayApp(ttk.Frame):
             self.preview_window.update_idletasks(); z=min(max(400,self.preview_surface.canvas.winfo_width())/self.original_frame.width,max(300,self.preview_surface.canvas.winfo_height())/self.original_frame.height)
         return max(1,round(self.original_frame.width*z)),max(1,round(self.original_frame.height*z))
 
-    def _render_large(self) -> None:
-        if not self.preview_surface or not self.preview_window or not self.preview_window.winfo_exists() or not self.original_frame:return
-        s=self.preview_surface; w,h=self._large_display_size(); s.geometry=PreviewGeometry(self.original_frame.width,self.original_frame.height,w,h); s.photo=ImageTk.PhotoImage(self.original_frame.resize((w,h),Image.Resampling.LANCZOS)); s.canvas.delete("all"); s.canvas.configure(scrollregion=(0,0,w,h)); s.canvas.create_image(0,0,anchor="nw",image=s.photo,tags="preview"); s.rectangle=list(s.geometry.from_region(self.region)); self._draw_surface(s)
+    def _render_large(self, restore_view: bool = True) -> None:
+        if not self.preview_surface or not self.preview_window or not self.preview_window.winfo_exists() or not self.original_frame:
+            return
+        s = self.preview_surface
+        canvas = s.canvas
+        old_x = canvas.xview()[0] if restore_view else 0.0
+        old_y = canvas.yview()[0] if restore_view else 0.0
+        w, h = self._large_display_size()
+        s.geometry = PreviewGeometry(self.original_frame.width, self.original_frame.height, w, h)
+        s.photo = ImageTk.PhotoImage(self.original_frame.resize((w, h), Image.Resampling.LANCZOS))
+        canvas.delete("all")
+        canvas.configure(scrollregion=(0, 0, w, h))
+        canvas.create_image(0, 0, anchor="nw", image=s.photo, tags="preview")
+        s.rectangle = list(s.geometry.from_region(self.region))
+        self._draw_surface(s)
+        if restore_view:
+            canvas.update_idletasks()
+            canvas.xview_moveto(max(0.0, min(1.0, old_x)))
+            canvas.yview_moveto(max(0.0, min(1.0, old_y)))
 
     def _draw_surface(self,surface: PreviewSurface) -> None:
         surface.canvas.delete("region","magnifier")
@@ -555,6 +593,10 @@ class VideoImageOverlayApp(ttk.Frame):
         if not self.original_frame or not surface.geometry:return
         scale=max(surface.geometry.scale,.001); sx=(x-surface.geometry.offset_x-surface.pan_x)/scale; sy=(y-surface.geometry.offset_y-surface.pan_y)/scale; cw,ch=min(self.original_frame.width,220/(2.5*scale)),min(self.original_frame.height,180/(2.5*scale)); left=max(0,min(self.original_frame.width-cw,sx-cw/2)); top=max(0,min(self.original_frame.height-ch,sy-ch/2)); crop=self.original_frame.crop((round(left),round(top),round(left+cw),round(top+ch))).resize((220,180),Image.Resampling.LANCZOS); surface.magnifier_photo=ImageTk.PhotoImage(crop); px=min(max(8,x+18),max(8,surface.canvas.winfo_width()-228)); py=min(max(8,y+18),max(8,surface.canvas.winfo_height()-188)); surface.canvas.create_image(px,py,anchor="nw",image=surface.magnifier_photo,tags="magnifier"); surface.canvas.create_rectangle(px,py,px+220,py+180,outline="#facc15",width=2,tags="magnifier")
 
+    def _on_preview_scale(self, value: str) -> None:
+        self._set_preview_zoom(float(value))
+        self._render_large()
+
     def open_preview(self):
         if not self.original_frame:self.status_var.set("请先选择有效源文件夹并加载首帧预览。"); self.write_log(self.status_var.get()); return
         if self.preview_window and self.preview_window.winfo_exists():self.preview_window.deiconify(); self.preview_window.lift(); return
@@ -562,7 +604,7 @@ class VideoImageOverlayApp(ttk.Frame):
         try: w.iconbitmap(str(app_icon_path()))
         except tk.TclError: pass
         w.protocol("WM_DELETE_WINDOW",self.close_preview); w.bind("<F11>",self.toggle_fullscreen); w.bind("<Escape>",self.exit_fullscreen); w.bind("<Configure>",self.on_preview_configure)
-        bar=ttk.Frame(w,padding=(14,12)); bar.pack(fill="x"); ttk.Label(bar,text="缩放").pack(side="left"); value=tk.DoubleVar(value=self._zoom_value() or 1.0); ttk.Scale(bar,from_=.5,to=4.0,variable=value,orient="horizontal",length=220,command=lambda v:(self.preview_zoom_var.set(f"{float(v):.2f}"),self._render_large(),self.schedule_persist())).pack(side="left",padx=10); ttk.Label(bar,text="滚轮 50%～400% · 右键平移 · Esc 退出全屏",style="Hint.TLabel").pack(side="left")
+        bar=ttk.Frame(w,padding=(14,12)); bar.pack(fill="x"); ttk.Label(bar,text="缩放").pack(side="left"); self.preview_scale_var=tk.DoubleVar(value=self._zoom_value() or 1.0); self._set_preview_zoom(self._zoom_value(), persist=False); ttk.Scale(bar,from_=.5,to=4.0,variable=self.preview_scale_var,orient="horizontal",length=220,command=self._on_preview_scale).pack(side="left",padx=10); ttk.Label(bar,textvariable=self.preview_zoom_label_var,style="Hint.TLabel").pack(side="left",padx=(0,12)); ttk.Label(bar,text="滚轮 50%～400% · 右键平移 · Esc 退出全屏",style="Hint.TLabel").pack(side="left")
         content=ttk.Frame(w); content.pack(fill="both",expand=True,padx=12,pady=(0,12)); content.rowconfigure(0,weight=1); content.columnconfigure(0,weight=1); c=tk.Canvas(content,background="#111827",highlightthickness=0); xb=ttk.Scrollbar(content,orient="horizontal",command=c.xview); yb=ttk.Scrollbar(content,orient="vertical",command=c.yview); c.configure(xscrollcommand=xb.set,yscrollcommand=yb.set); c.grid(row=0,column=0,sticky="nsew"); yb.grid(row=0,column=1,sticky="ns"); xb.grid(row=1,column=0,sticky="ew"); self.preview_surface=PreviewSurface(c); self._bind_surface(self.preview_surface); w.update_idletasks(); self._render_large()
 
     def on_preview_configure(self,event):
@@ -637,16 +679,28 @@ class VideoImageOverlayApp(ttk.Frame):
             return
         surface, pointer_x, pointer_y, source_x, source_y = request
         if surface is self.preview_surface:
-            self._render_large()
-            if self.original_frame and self.preview_surface:
-                width, height = self._large_display_size()
-                viewport_w = max(1, self.preview_surface.canvas.winfo_width())
-                viewport_h = max(1, self.preview_surface.canvas.winfo_height())
-                target_x = max(0.0, source_x * width - pointer_x)
-                target_y = max(0.0, source_y * height - pointer_y)
-                max_x = max(1.0, width - viewport_w); max_y = max(1.0, height - viewport_h)
-                self.preview_surface.canvas.xview_moveto(min(1.0, target_x / max_x))
-                self.preview_surface.canvas.yview_moveto(min(1.0, target_y / max_y))
+            self._render_large(restore_view=False)
+            if self.original_frame and self.preview_surface and self.preview_surface.geometry:
+                canvas = self.preview_surface.canvas
+                canvas.update_idletasks()
+                width = self.preview_surface.geometry.canvas_width
+                height = self.preview_surface.geometry.canvas_height
+                viewport_w = max(1, canvas.winfo_width())
+                viewport_h = max(1, canvas.winfo_height())
+                target_x = source_x * width - pointer_x
+                target_y = source_y * height - pointer_y
+                max_x = max(0.0, float(width - viewport_w))
+                max_y = max(0.0, float(height - viewport_h))
+                if max_x <= 0:
+                    canvas.xview_moveto(0.0)
+                else:
+                    target_x = max(0.0, min(max_x, target_x))
+                    canvas.xview_moveto(target_x / max(1.0, float(width)))
+                if max_y <= 0:
+                    canvas.yview_moveto(0.0)
+                else:
+                    target_y = max(0.0, min(max_y, target_y))
+                    canvas.yview_moveto(target_y / max(1.0, float(height)))
         else:
             surface.zoom = max(0.5, min(4.0, surface.zoom))
             self._render_main()
@@ -658,13 +712,16 @@ class VideoImageOverlayApp(ttk.Frame):
         factor = 1.06 if step > 0 else (1 / 1.06)
         new_value = max(0.5, min(4.0, current * factor))
         if surface is self.preview_surface:
-            if self.preview_surface and self.preview_surface.geometry and self.original_frame:
-                old_width, old_height = self._large_display_size()
-                source_x = self.preview_surface.canvas.canvasx(event.x) / max(1, old_width)
-                source_y = self.preview_surface.canvas.canvasy(event.y) / max(1, old_height)
+            canvas = surface.canvas
+            canvas.update_idletasks()
+            if surface.geometry and self.original_frame:
+                old_width = max(1, surface.geometry.canvas_width)
+                old_height = max(1, surface.geometry.canvas_height)
+                source_x = max(0.0, min(1.0, canvas.canvasx(event.x) / old_width))
+                source_y = max(0.0, min(1.0, canvas.canvasy(event.y) / old_height))
             else:
                 source_x = source_y = 0.5
-            self.preview_zoom_var.set(f"{new_value:.4f}")
+            self._set_preview_zoom(new_value, persist=False)
             self._zoom_request = (surface, float(event.x), float(event.y), source_x, source_y)
         else:
             surface.zoom = new_value

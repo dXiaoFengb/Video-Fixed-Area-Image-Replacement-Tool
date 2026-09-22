@@ -1,3 +1,3 @@
-"""VideoImageOverlay v0.4.1。"""
+"""VideoImageOverlay v0.4.2。"""
 
-__version__ = "0.4.1"
+__version__ = "0.4.2"

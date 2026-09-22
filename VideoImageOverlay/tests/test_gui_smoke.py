@@ -51,6 +51,7 @@ class GuiSmokeTests(unittest.TestCase):
         root = tk.Tk()
         root.withdraw()
         app = VideoImageOverlayApp(root)
+        app.source_var.set("")
         app.original_frame = Image.new("RGB", (640, 360), "blue")
         try:
             root.update()
@@ -75,6 +76,7 @@ class GuiSmokeTests(unittest.TestCase):
         root = tk.Tk()
         root.withdraw()
         app = VideoImageOverlayApp(root)
+        app.source_var.set("")
         app.original_frame = Image.new("RGB", (1200, 800), "blue")
         try:
             root.update()
@@ -130,6 +132,90 @@ class GuiSmokeTests(unittest.TestCase):
         finally:
             if root.winfo_exists():
                 app.on_close()
+    def test_large_preview_centers_small_image_and_reuses_quality_timer(self) -> None:
+        root = tk.Tk()
+        root.withdraw()
+        app = VideoImageOverlayApp(root)
+        app.source_var.set("")
+        app.original_frame = Image.new("RGB", (320, 180), "blue")
+        try:
+            root.update()
+            app.open_preview()
+            root.update()
+            app._set_preview_zoom(0.5, persist=False)
+            app._render_large()
+            surface = app.preview_surface
+            self.assertGreater(surface.content_origin_x, 0)
+            self.assertGreater(surface.content_origin_y, 0)
+            self.assertEqual(surface.canvas.xview()[0], 0.0)
+            self.assertEqual(surface.canvas.yview()[0], 0.0)
+            calls = []
+            original_render = app._render_large
+            app._render_large = lambda *args, **kwargs: (calls.append(kwargs.get("quality")), original_render(*args, **kwargs))[1]
+            event = type("Event", (), {"delta": 120, "x": 160, "y": 100})()
+            for _ in range(10):
+                app._on_wheel(surface, event)
+            root.update_idletasks()
+            root.update()
+            self.assertEqual(calls.count("interactive"), 1)
+            root.after(140, root.quit)
+            root.mainloop()
+            self.assertEqual(calls.count("final"), 1)
+        finally:
+            if root.winfo_exists():
+                app.on_close()
+
+    def test_large_preview_new_wheel_cancels_pending_quality_render(self) -> None:
+        root = tk.Tk()
+        root.withdraw()
+        app = VideoImageOverlayApp(root)
+        app.original_frame = Image.new("RGB", (1200, 800), "blue")
+        try:
+            root.update()
+            app.open_preview()
+            root.update()
+            surface = app.preview_surface
+            app._on_wheel(surface, type("Event", (), {"delta": 120, "x": 300, "y": 200})())
+            root.update_idletasks()
+            root.update()
+            pending = app._large_quality_after
+            self.assertIsNotNone(pending)
+            cancelled = []
+            original_cancel = root.after_cancel
+            root.after_cancel = lambda identifier: (cancelled.append(identifier), original_cancel(identifier))[1]
+            app._on_wheel(surface, type("Event", (), {"delta": 120, "x": 320, "y": 220})())
+            self.assertIn(pending, cancelled)
+        finally:
+            if root.winfo_exists():
+                app.on_close()
+
+    def test_magnifier_is_four_x_mouse_centered_and_layered(self) -> None:
+        root = tk.Tk()
+        root.withdraw()
+        app = VideoImageOverlayApp(root)
+        app.original_frame = Image.new("RGB", (640, 360), "blue")
+        try:
+            root.update()
+            app._render_main()
+            surface = app.main_surface
+            press = type("Event", (), {"x": 250, "y": 180})()
+            drag = type("Event", (), {"x": 330, "y": 250})()
+            app._on_press(surface, press)
+            app._on_drag(surface, drag)
+            self.assertIsNotNone(surface.magnifier_source_box)
+            left, top, right, bottom = surface.magnifier_source_box
+            scale = surface.geometry.scale
+            self.assertAlmostEqual(right - left, min(app.original_frame.width, 220 / (4.0 * scale)), places=2)
+            source_x = (drag.x - surface.geometry.offset_x) / scale
+            source_y = (drag.y - surface.geometry.offset_y) / scale
+            self.assertAlmostEqual((left + right) / 2, max(0, min(app.original_frame.width, source_x)), delta=2)
+            self.assertAlmostEqual((top + bottom) / 2, max(0, min(app.original_frame.height, source_y)), delta=2)
+            self.assertIsNotNone(surface.magnifier_item)
+            self.assertIsNotNone(surface.magnifier_border_item)
+        finally:
+            if root.winfo_exists():
+                app.on_close()
+
     def test_right_pan_wheel_and_magnifier(self) -> None:
         root = tk.Tk()
         root.withdraw()

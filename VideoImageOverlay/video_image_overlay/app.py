@@ -224,7 +224,6 @@ class VideoImageOverlayApp(ttk.Frame):
             self.schedule_persist()
 
     def on_close(self) -> None:
-        self._settings_ready = False
         self.close_preview()
         if self._save_after:
             try: self.root.after_cancel(self._save_after)
@@ -234,7 +233,9 @@ class VideoImageOverlayApp(ttk.Frame):
             try: self.root.after_cancel(self._zoom_after)
             except tk.TclError: pass
             self._zoom_after = None
+        # 关闭前先在设置仍可写状态下保存，避免路径变更被提前置为未就绪而丢失。
         self.persist_settings()
+        self._settings_ready = False
         self.root.destroy()
 
     def choose_source(self) -> None:

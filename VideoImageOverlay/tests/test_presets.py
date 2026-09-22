@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 from PIL import Image
 
-from video_image_overlay.presets import PRESET_FILENAMES, install_presets, preset_directory
+from video_image_overlay.presets import PRESET_FILENAMES, app_icon_path, install_presets, preset_directory
 
 
 class PresetTests(unittest.TestCase):
@@ -21,6 +21,9 @@ class PresetTests(unittest.TestCase):
                 self.assertEqual(image.size, (1280, 720))
                 self.assertEqual(image.format, "PNG")
 
+    def test_app_icon_contains_all_windows_sizes(self) -> None:
+        with Image.open(app_icon_path()) as image:
+            self.assertEqual(image.ico.sizes(), {(16, 16), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)})
     def test_frozen_resource_directory_uses_meipass(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
             with patch("video_image_overlay.presets.sys.frozen", True, create=True), patch("video_image_overlay.presets.sys._MEIPASS", raw, create=True):

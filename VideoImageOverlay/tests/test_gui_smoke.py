@@ -47,5 +47,34 @@ class GuiSmokeTests(unittest.TestCase):
                 root.destroy()
 
 
+    def test_right_pan_wheel_and_magnifier(self) -> None:
+        root = tk.Tk()
+        root.withdraw()
+        app = VideoImageOverlayApp(root)
+        app.original_frame = Image.new("RGB", (640, 360), "blue")
+        try:
+            root.update()
+            app._render_main()
+            app._settings_ready = False
+            original = app.region
+            surface = app.main_surface
+            app._on_pan_press(surface, type("Event", (), {"x": 200, "y": 160})())
+            app._on_pan_drag(surface, type("Event", (), {"x": 240, "y": 190})())
+            app._on_pan_release(surface, type("Event", (), {"x": 240, "y": 190})())
+            self.assertEqual(app.region, original)
+            app._on_wheel(surface, type("Event", (), {"delta": 120})())
+            self.assertGreater(surface.zoom, 1.0)
+            app._on_press(surface, type("Event", (), {"x": 250, "y": 180})())
+            app._on_drag(surface, type("Event", (), {"x": 330, "y": 250})())
+            self.assertIsNotNone(surface.magnifier_photo)
+            app._on_release(surface, type("Event", (), {"x": 330, "y": 250})())
+            self.assertIsNone(surface.drag_mode)
+        finally:
+            if app._save_after:
+                try: root.after_cancel(app._save_after)
+                except tk.TclError: pass
+            if root.winfo_exists():
+                app.on_close()
+
 if __name__ == "__main__":
     unittest.main()

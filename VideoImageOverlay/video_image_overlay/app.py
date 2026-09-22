@@ -24,6 +24,11 @@ class PreviewSurface:
     rectangle: list[float] | None = None
     drag_mode: str | None = None
     drag_anchor: tuple[float, float] = (0.0, 0.0)
+    pan_x: float = 0.0
+    pan_y: float = 0.0
+    pan_anchor: tuple[float, float] = (0.0, 0.0)
+    zoom: float = 1.0
+    magnifier_photo: ImageTk.PhotoImage | None = None
 
 
 class VideoImageOverlayApp(ttk.Frame):
@@ -39,7 +44,7 @@ class VideoImageOverlayApp(ttk.Frame):
         self._settings_ready = False
         self._save_after: str | None = None
         self._preview_render_after: str | None = None
-        self.root.title("VideoImageOverlay v0.3.0")
+        self.root.title("VideoImageOverlay v0.4.0")
         try:
             self.root.iconbitmap(str(app_icon_path()))
         except tk.TclError:
@@ -64,7 +69,7 @@ class VideoImageOverlayApp(ttk.Frame):
         self.processor: VideoProcessor | None = None
         self.preview_window: tk.Toplevel | None = None
         self.preview_surface: PreviewSurface | None = None
-        self.preview_zoom_var = tk.StringVar(value=self.saved_settings.preview_zoom)
+        self.preview_zoom_var = tk.StringVar(value="fit" if self.saved_settings.preview_zoom is None else f"{self.saved_settings.preview_zoom:.2f}")
         self.preview_fullscreen = False
         self._build()
         self.root.protocol("WM_DELETE_WINDOW", self.on_close)
@@ -200,7 +205,12 @@ class VideoImageOverlayApp(ttk.Frame):
             self.schedule_persist()
 
     def on_close(self) -> None:
+        self._settings_ready = False
         self.close_preview()
+        if self._save_after:
+            try: self.root.after_cancel(self._save_after)
+            except tk.TclError: pass
+            self._save_after = None
         self.persist_settings()
         self.root.destroy()
 
@@ -429,6 +439,121 @@ class VideoImageOverlayApp(ttk.Frame):
             self.preview_window.destroy()
         self.preview_window = None
         self.preview_surface = None
+        self.schedule_persist()
+
+    def _configure_style(self) -> None:
+        style = ttk.Style(self.root)
+        try: style.theme_use("vista")
+        except tk.TclError: pass
+        style.configure("Card.TLabelframe", padding=14)
+        style.configure("Card.TLabelframe.Label", font=("Segoe UI", 10, "bold"), foreground="#0f172a")
+        style.configure("Title.TLabel", font=("Segoe UI", 18, "bold"), foreground="#0f172a")
+        style.configure("Subtitle.TLabel", font=("Segoe UI", 9), foreground="#64748b")
+        style.configure("Primary.TButton", font=("Segoe UI", 10, "bold"))
+        style.configure("Hint.TLabel", foreground="#64748b")
+
+    def _build(self) -> None:
+        self.columnconfigure(0, weight=1); self.rowconfigure(2, weight=1)
+        head=ttk.Frame(self); head.grid(row=0,column=0,sticky="ew",pady=(0,12)); head.columnconfigure(0,weight=1)
+        ttk.Label(head,text="VideoImageOverlay",style="Title.TLabel").grid(row=0,column=0,sticky="w")
+        ttk.Label(head,text="固定区域图片覆盖 · v0.4.0",style="Subtitle.TLabel").grid(row=1,column=0,sticky="w")
+        form=ttk.LabelFrame(self,text="输入与输出",style="Card.TLabelframe"); form.grid(row=1,column=0,sticky="ew"); form.columnconfigure(1,weight=1)
+        for row,(label,var,action) in enumerate((("源文件夹",self.source_var,self.choose_source),("目标文件夹",self.destination_var,self.choose_destination),("替换图片",self.image_var,self.choose_image))):
+            ttk.Label(form,text=label).grid(row=row,column=0,padx=(0,12),pady=6,sticky="w"); ttk.Entry(form,textvariable=var).grid(row=row,column=1,pady=6,sticky="ew"); ttk.Button(form,text="选择",command=action).grid(row=row,column=2,padx=(10,0),pady=6)
+        ttk.Button(form,text="安装常用素材",command=self.install_common_presets).grid(row=3,column=1,pady=(8,0),sticky="w")
+        preview=ttk.LabelFrame(self,text="首帧预览",style="Card.TLabelframe"); preview.grid(row=2,column=0,pady=(12,0),sticky="nsew"); preview.columnconfigure(0,weight=1); preview.rowconfigure(0,weight=1)
+        self.canvas=tk.Canvas(preview,width=self.CANVAS_WIDTH,height=self.CANVAS_HEIGHT,background="#111827",highlightthickness=0,cursor="crosshair"); self.canvas.grid(row=0,column=0,sticky="nsew")
+        self.main_surface=PreviewSurface(self.canvas); self._bind_surface(self.main_surface)
+        ttk.Label(preview,text="左键框选/移动/缩放 · 右键平移 · 滚轮连续缩放 · 拖动时显示 2.5× 放大镜",style="Hint.TLabel").grid(row=1,column=0,pady=(8,0),sticky="w")
+        actions=ttk.Frame(self); actions.grid(row=3,column=0,pady=12,sticky="ew")
+        self.start_button=ttk.Button(actions,text="开始批量处理",style="Primary.TButton",command=self.start); self.start_button.pack(side="left")
+        self.cancel_button=ttk.Button(actions,text="取消",command=self.cancel,state="disabled"); self.cancel_button.pack(side="left",padx=(8,0))
+        ttk.Button(actions,text="放大预览",command=self.open_preview).pack(side="left",padx=(8,0)); ttk.Progressbar(actions,variable=self.progress_var,maximum=100).pack(side="left",fill="x",expand=True,padx=(16,0))
+        ttk.Label(self,textvariable=self.status_var,style="Status.TLabel").grid(row=4,column=0,pady=(0,4),sticky="w")
+        self.log=tk.Text(self,height=8,state="disabled",wrap="word",background="#f8fafc",foreground="#334155",relief="flat",padx=10,pady=8); self.log.grid(row=5,column=0,sticky="nsew"); self.rowconfigure(5,weight=1)
+
+    def _bind_surface(self,surface: PreviewSurface) -> None:
+        c=surface.canvas; c.bind("<ButtonPress-1>",lambda e:self._on_press(surface,e)); c.bind("<B1-Motion>",lambda e:self._on_drag(surface,e)); c.bind("<ButtonRelease-1>",lambda e:self._on_release(surface,e)); c.bind("<ButtonPress-3>",lambda e:self._on_pan_press(surface,e)); c.bind("<B3-Motion>",lambda e:self._on_pan_drag(surface,e)); c.bind("<ButtonRelease-3>",lambda e:self._on_pan_release(surface,e)); c.bind("<MouseWheel>",lambda e:self._on_wheel(surface,e)); c.bind("<Button-4>",lambda e:self._on_wheel(surface,e,1)); c.bind("<Button-5>",lambda e:self._on_wheel(surface,e,-1))
+
+    def _zoom_value(self) -> float | None:
+        value=self.preview_zoom_var.get().strip().lower()
+        if value in ("","fit"): return None
+        try: return max(.5,min(4.0,float(value.rstrip("%"))/(100 if value.endswith("%") else 1)))
+        except ValueError: return None
+
+    def collect_settings(self) -> AppSettings:
+        state=self.root.state() if self.root.state() in {"normal","zoomed"} else "normal"
+        return AppSettings(self.source_var.get(),self.destination_var.get(),self.image_var.get(),(self.region.x,self.region.y,self.region.width,self.region.height),"normalized",max(640,self.root.winfo_width()),max(480,self.root.winfo_height()),state,*self._preview_size(),self._zoom_value())
+
+    def _render_main(self) -> None:
+        if not self.original_frame: return
+        s=self.main_surface; w=self.canvas.winfo_width() or self.CANVAS_WIDTH; h=self.canvas.winfo_height() or self.CANVAS_HEIGHT; s.geometry=PreviewGeometry(self.original_frame.width,self.original_frame.height,w,h,s.zoom); size=(max(1,round(self.original_frame.width*s.geometry.scale)),max(1,round(self.original_frame.height*s.geometry.scale))); s.photo=ImageTk.PhotoImage(self.original_frame.resize(size,Image.Resampling.LANCZOS)); s.canvas.delete("all"); s.canvas.create_image(s.geometry.offset_x+s.pan_x,s.geometry.offset_y+s.pan_y,anchor="nw",image=s.photo,tags="preview"); s.rectangle=[v+(s.pan_x if i%2==0 else s.pan_y) for i,v in enumerate(s.geometry.from_region(self.region))]; self.preview_geometry=s.geometry; self.rectangle=s.rectangle; self._draw_surface(s)
+
+    def _large_display_size(self):
+        assert self.original_frame and self.preview_surface and self.preview_window
+        z=self._zoom_value()
+        if z is None:
+            self.preview_window.update_idletasks(); z=min(max(400,self.preview_surface.canvas.winfo_width())/self.original_frame.width,max(300,self.preview_surface.canvas.winfo_height())/self.original_frame.height)
+        return max(1,round(self.original_frame.width*z)),max(1,round(self.original_frame.height*z))
+
+    def _render_large(self) -> None:
+        if not self.preview_surface or not self.preview_window or not self.preview_window.winfo_exists() or not self.original_frame:return
+        s=self.preview_surface; w,h=self._large_display_size(); s.geometry=PreviewGeometry(self.original_frame.width,self.original_frame.height,w,h); s.photo=ImageTk.PhotoImage(self.original_frame.resize((w,h),Image.Resampling.LANCZOS)); s.canvas.delete("all"); s.canvas.configure(scrollregion=(0,0,w,h)); s.canvas.create_image(0,0,anchor="nw",image=s.photo,tags="preview"); s.rectangle=list(s.geometry.from_region(self.region)); self._draw_surface(s)
+
+    def _draw_surface(self,surface: PreviewSurface) -> None:
+        surface.canvas.delete("region","magnifier")
+        if not surface.rectangle:return
+        l,t,r,b=surface.rectangle; surface.canvas.create_rectangle(l,t,r,b,outline="#facc15",width=3,tags="region"); surface.canvas.create_rectangle(r-7,b-7,r+7,b+7,fill="#facc15",outline="",tags="region")
+
+    def _event_xy(self,surface,event): return surface.canvas.canvasx(event.x),surface.canvas.canvasy(event.y)
+
+    def _on_press(self,surface,event):
+        if not surface.geometry or not surface.rectangle:return "break"
+        x,y=self._event_xy(surface,event); l,t,r,b=surface.rectangle; surface.drag_anchor=(x,y); surface.drag_mode="resize" if abs(x-r)<=18 and abs(y-b)<=18 else ("move" if l<=x<=r and t<=y<=b else "new")
+        if surface.drag_mode=="new":surface.rectangle=[x,y,x+1,y+1]
+        self._draw_surface(surface); return "break"
+
+    def _on_drag(self,surface,event):
+        if not surface.drag_mode or surface.drag_mode=="pan" or not surface.rectangle:return "break"
+        x,y=self._event_xy(surface,event); l,t,r,b=surface.rectangle; dx,dy=x-surface.drag_anchor[0],y-surface.drag_anchor[1]
+        if surface.drag_mode=="move":surface.rectangle=[l+dx,t+dy,r+dx,b+dy]; surface.drag_anchor=(x,y)
+        else:surface.rectangle[2],surface.rectangle[3]=x,y
+        self._draw_surface(surface); self._draw_magnifier(surface,x,y); return "break"
+
+    def _on_release(self,surface,event):
+        if not surface.geometry or not surface.rectangle:surface.drag_mode=None; return "break"
+        l,t,r,b=surface.rectangle; pan_x = surface.pan_x if surface is not self.preview_surface else 0.0; pan_y = surface.pan_y if surface is not self.preview_surface else 0.0; self.region=surface.geometry.to_region(min(l,r)-pan_x,min(t,b)-pan_y,max(l,r)-pan_x,max(t,b)-pan_y); surface.drag_mode=None; surface.canvas.delete("magnifier"); self._render_main(); self._render_large(); self.persist_settings(); return "break"
+
+    def _on_pan_press(self,surface,event): surface.drag_mode="pan"; surface.pan_anchor=(event.x,event.y); surface.canvas.scan_mark(event.x,event.y); return "break"
+    def _on_pan_drag(self,surface,event):
+        if surface.drag_mode!="pan":return "break"
+        if surface is self.preview_surface:surface.canvas.scan_dragto(event.x,event.y,gain=1)
+        else:surface.pan_x+=event.x-surface.pan_anchor[0]; surface.pan_y+=event.y-surface.pan_anchor[1]; surface.pan_anchor=(event.x,event.y); self._render_main()
+        return "break"
+    def _on_pan_release(self,surface,event):surface.drag_mode=None; return "break"
+
+    def _on_wheel(self,surface,event,direction=0):
+        step=direction or (1 if event.delta>0 else -1)
+        if surface is self.preview_surface:self.preview_zoom_var.set(f"{max(.5,min(4.0,(self._zoom_value() or 1.0)+step*.1)):.2f}"); self._render_large()
+        else:surface.zoom=max(.5,min(4.0,surface.zoom+step*.1)); self._render_main()
+        self.schedule_persist(); return "break"
+
+    def _draw_magnifier(self,surface,x,y):
+        if not self.original_frame or not surface.geometry:return
+        scale=max(surface.geometry.scale,.001); sx=(x-surface.geometry.offset_x-surface.pan_x)/scale; sy=(y-surface.geometry.offset_y-surface.pan_y)/scale; cw,ch=min(self.original_frame.width,220/(2.5*scale)),min(self.original_frame.height,180/(2.5*scale)); left=max(0,min(self.original_frame.width-cw,sx-cw/2)); top=max(0,min(self.original_frame.height-ch,sy-ch/2)); crop=self.original_frame.crop((round(left),round(top),round(left+cw),round(top+ch))).resize((220,180),Image.Resampling.LANCZOS); surface.magnifier_photo=ImageTk.PhotoImage(crop); px=min(max(8,x+18),max(8,surface.canvas.winfo_width()-228)); py=min(max(8,y+18),max(8,surface.canvas.winfo_height()-188)); surface.canvas.create_image(px,py,anchor="nw",image=surface.magnifier_photo,tags="magnifier"); surface.canvas.create_rectangle(px,py,px+220,py+180,outline="#facc15",width=2,tags="magnifier")
+
+    def open_preview(self):
+        if not self.original_frame:self.status_var.set("请先选择有效源文件夹并加载首帧预览。"); self.write_log(self.status_var.get()); return
+        if self.preview_window and self.preview_window.winfo_exists():self.preview_window.deiconify(); self.preview_window.lift(); return
+        w=tk.Toplevel(self.root); self.preview_window=w; w.title("VideoImageOverlay · 放大预览"); w.geometry(f"{self.saved_settings.preview_width}x{self.saved_settings.preview_height}"); w.minsize(800,600);
+        try: w.iconbitmap(str(app_icon_path()))
+        except tk.TclError: pass
+        w.protocol("WM_DELETE_WINDOW",self.close_preview); w.bind("<F11>",self.toggle_fullscreen); w.bind("<Escape>",self.exit_fullscreen); w.bind("<Configure>",self.on_preview_configure)
+        bar=ttk.Frame(w,padding=(14,12)); bar.pack(fill="x"); ttk.Label(bar,text="缩放").pack(side="left"); value=tk.DoubleVar(value=self._zoom_value() or 1.0); ttk.Scale(bar,from_=.5,to=4.0,variable=value,orient="horizontal",length=220,command=lambda v:(self.preview_zoom_var.set(f"{float(v):.2f}"),self._render_large(),self.schedule_persist())).pack(side="left",padx=10); ttk.Label(bar,text="滚轮 50%～400% · 右键平移 · Esc 退出全屏",style="Hint.TLabel").pack(side="left")
+        content=ttk.Frame(w); content.pack(fill="both",expand=True,padx=12,pady=(0,12)); content.rowconfigure(0,weight=1); content.columnconfigure(0,weight=1); c=tk.Canvas(content,background="#111827",highlightthickness=0); xb=ttk.Scrollbar(content,orient="horizontal",command=c.xview); yb=ttk.Scrollbar(content,orient="vertical",command=c.yview); c.configure(xscrollcommand=xb.set,yscrollcommand=yb.set); c.grid(row=0,column=0,sticky="nsew"); yb.grid(row=0,column=1,sticky="ns"); xb.grid(row=1,column=0,sticky="ew"); self.preview_surface=PreviewSurface(c); self._bind_surface(self.preview_surface); w.update_idletasks(); self._render_large()
+
+    def on_preview_configure(self,event):
+        if self.preview_window and event.widget==self.preview_window and self._zoom_value() is None:self.preview_window.after_idle(self._render_large)
         self.schedule_persist()
 
     def selected_region(self) -> Region:

@@ -11,10 +11,11 @@ class PreviewGeometry:
     source_height: int
     canvas_width: int
     canvas_height: int
+    zoom: float = 1.0
 
     @property
     def scale(self) -> float:
-        return min(self.canvas_width / self.source_width, self.canvas_height / self.source_height)
+        return min(self.canvas_width / self.source_width, self.canvas_height / self.source_height) * self.zoom
 
     @property
     def offset_x(self) -> float:

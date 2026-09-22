@@ -10,7 +10,24 @@ from typing import Callable
 
 
 DEFAULT_REGION = (0.22, 0.23, 0.29, 0.28)
-PREVIEW_ZOOMS = {"fit", "100%", "150%", "200%"}
+MIN_PREVIEW_ZOOM = 0.5
+MAX_PREVIEW_ZOOM = 4.0
+
+
+def migrate_preview_zoom(value: object) -> float | None:
+    """将旧版缩放值迁移为数值；fit/非法值返回 None 表示适应窗口。"""
+    if value == "fit":
+        return None
+    legacy = {"100%": 1.0, "150%": 1.5, "200%": 2.0}
+    if isinstance(value, str) and value in legacy:
+        return legacy[value]
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError):
+        return None
+    if MIN_PREVIEW_ZOOM <= numeric <= MAX_PREVIEW_ZOOM:
+        return numeric
+    return None
 
 
 @dataclass(frozen=True)
@@ -25,7 +42,7 @@ class AppSettings:
     window_state: str = "normal"
     preview_width: int = 1280
     preview_height: int = 800
-    preview_zoom: str = "fit"
+    preview_zoom: float | None = None
 
     @classmethod
     def from_dict(cls, value: object) -> "AppSettings":
@@ -49,9 +66,7 @@ class AppSettings:
             raise ValueError("位置模式无效")
         preview_width = max(800, int(value.get("preview_width", 1280)))
         preview_height = max(600, int(value.get("preview_height", 800)))
-        preview_zoom = str(value.get("preview_zoom", "fit"))
-        if preview_zoom not in PREVIEW_ZOOMS:
-            preview_zoom = "fit"
+        preview_zoom = migrate_preview_zoom(value.get("preview_zoom", "fit"))
         return cls(str(value.get("source_path", "")), str(value.get("destination_path", "")), str(value.get("image_path", "")), region, mode, width, height, state, preview_width, preview_height, preview_zoom)
 
     def to_dict(self) -> dict[str, object]:

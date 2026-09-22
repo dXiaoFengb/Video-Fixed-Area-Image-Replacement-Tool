@@ -1,12 +1,12 @@
 # 版本与发布记录
 
-<!-- build: version=v0.3.0; codename=preview-presets; chinese=视频固定区域图片替换; date=2026-09-22 -->
+<!-- build: version=v0.4.0; codename=preview-presets; chinese=视频固定区域图片替换; date=2026-09-22 -->
 
 版本、代号、中文名、日期与构建标记集中在此文件维护。
 
 | 版本 | 代号 | 中文名 | 日期 | 状态 |
 | --- | --- | --- | --- | --- |
-| v0.3.0 | preview-presets | 视频固定区域图片替换 | 2026-09-22 | 本地交付已验证 |
+| v0.4.0 | modern-preview | 视频固定区域图片替换 | 2026-09-22 | 本地交付已验证 |
 
 ## 发布历史
 

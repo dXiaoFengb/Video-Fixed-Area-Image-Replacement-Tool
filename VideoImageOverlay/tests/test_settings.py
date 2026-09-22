@@ -17,13 +17,24 @@ class SettingsTests(unittest.TestCase):
     def test_round_trip_restores_all_gui_fields_and_uses_atomic_replace(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
             store = SettingsStore(Path(raw))
-            settings = AppSettings("C:/source", "D:/output", "C:/image.png", (0.1, 0.2, 0.3, 0.4), "normalized", 1234, 876, "zoomed", 1400, 900, "150%")
+            settings = AppSettings("C:/source", "D:/output", "C:/image.png", (0.1, 0.2, 0.3, 0.4), "normalized", 1234, 876, "zoomed", 1400, 900, 1.5)
             with patch("video_image_overlay.settings.os.replace", wraps=os.replace) as replace:
                 store.save(settings)
             self.assertEqual(replace.call_count, 1)
             self.assertEqual(store.load(), settings)
             self.assertEqual(list(Path(raw).glob(".settings-*.tmp")), [])
             self.assertEqual(json.loads(store.path.read_text(encoding="utf-8"))["window_width"], 1234)
+
+
+    def test_legacy_zoom_values_are_migrated(self) -> None:
+        base = {"region": [0.1, 0.1, 0.5, 0.5]}
+        self.assertIsNone(AppSettings.from_dict({**base, "preview_zoom": "fit"}).preview_zoom)
+        self.assertEqual(AppSettings.from_dict({**base, "preview_zoom": "100%"}).preview_zoom, 1.0)
+        self.assertEqual(AppSettings.from_dict({**base, "preview_zoom": "150%"}).preview_zoom, 1.5)
+        self.assertEqual(AppSettings.from_dict({**base, "preview_zoom": "200%"}).preview_zoom, 2.0)
+        self.assertIsNone(AppSettings.from_dict({**base, "preview_zoom": "bad"}).preview_zoom)
+        self.assertEqual(AppSettings.from_dict({**base, "preview_zoom": 0.5}).preview_zoom, 0.5)
+        self.assertEqual(AppSettings.from_dict({**base, "preview_zoom": 4.0}).preview_zoom, 4.0)
 
     def test_missing_or_corrupt_file_uses_defaults_and_logs(self) -> None:
         with tempfile.TemporaryDirectory() as raw:

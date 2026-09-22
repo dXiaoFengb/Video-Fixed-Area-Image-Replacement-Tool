@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 from PIL import Image
 
-from video_image_overlay.presets import PRESET_FILENAMES, app_icon_path, install_presets, preset_directory
+from video_image_overlay.presets import PRESET_FILENAMES, app_icon_path, install_presets, preset_directory, preset_is_present, remove_presets
 
 
 class PresetTests(unittest.TestCase):
@@ -43,6 +43,45 @@ class PresetTests(unittest.TestCase):
             self.assertEqual(len(result.installed), 7)
             self.assertFalse(result.failed)
             self.assertTrue(any("跳过" in message for message in messages))
+
+    def test_install_uninstall_button_state_source(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            application = Path(raw)
+            self.assertFalse(preset_is_present(application))
+            install_presets(application)
+            self.assertTrue(preset_is_present(application))
+            remove_presets(application)
+            self.assertFalse(preset_is_present(application))
+
+    def test_remove_only_matching_hashes_and_keeps_modified_files(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            application = Path(raw)
+            install_presets(application)
+            destination = application / "替换图片" / "常用素材"
+            modified = destination / PRESET_FILENAMES[0]
+            modified.write_bytes(b"user-modified")
+            custom = destination / "用户自定义.png"
+            custom.write_bytes(b"custom")
+            messages: list[str] = []
+            result = remove_presets(application, messages.append)
+            self.assertIn(PRESET_FILENAMES[0], result.skipped)
+            self.assertTrue(modified.exists())
+            self.assertTrue(custom.exists())
+            self.assertEqual(len(result.removed), 7)
+            self.assertTrue(any("内容已被修改，保留" in message for message in messages))
+
+    def test_remove_reports_missing_and_failure(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            application = Path(raw)
+            destination = application / "替换图片" / "常用素材"
+            destination.mkdir(parents=True)
+            messages: list[str] = []
+            result = remove_presets(application, messages.append)
+            self.assertEqual(len(result.missing), 8)
+            install_presets(application)
+            with patch("pathlib.Path.unlink", side_effect=OSError("拒绝访问")):
+                result = remove_presets(application, messages.append)
+            self.assertEqual(len(result.failed), 8)
 
     def test_install_failure_is_reported_without_raising(self) -> None:
         with tempfile.TemporaryDirectory() as raw:

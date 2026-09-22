@@ -1,12 +1,12 @@
 # 版本与发布记录
 
-<!-- build: version=v0.4.0; codename=preview-presets; chinese=视频固定区域图片替换; date=2026-09-22 -->
+<!-- build: version=v0.4.1; codename=preview-presets; chinese=视频固定区域图片替换; date=2026-09-22 -->
 
 版本、代号、中文名、日期与构建标记集中在此文件维护。
 
 | 版本 | 代号 | 中文名 | 日期 | 状态 |
 | --- | --- | --- | --- | --- |
-| v0.4.0 | modern-preview | 视频固定区域图片替换 | 2026-09-22 | 本地交付已验证 |
+| v0.4.1 | modern-preview | 视频固定区域图片替换 | 2026-09-22 | 本地交付已验证 |
 
 ## 发布历史
 
@@ -17,3 +17,4 @@
 | v0.1.0 | 2026-09-16 | 首次本地构建 | 见 handoff.md | 历史候选 |
 | v0.2.0 | 2026-09-17 | 便携设置与无弹窗处理 | 见 handoff.md | VideoImageOverlay.exe；SHA-256 见 handoff.md |
 | v0.3.0 | 2026-09-22 | 放大预览与基础遮挡素材 | 22/22 通过；见本轮报告 | VideoImageOverlay.exe；SHA-256：D399CB32511BDB845883F9840F9971FF9B2A3E96D92E9B55D8B96C38B5BBA42C |
+| v0.4.1 | 2026-09-22 | 首帧渲染、平滑缩放与安全素材卸载 | 29/29 通过；见 handoff.md | VideoImageOverlay.exe；SHA-256：9A13EE8D26A44AE6DB3500CC68C62411AB3AF1A8564626051CAF223CA1650C5B |

@@ -44,8 +44,32 @@ class GuiSmokeTests(unittest.TestCase):
             self.assertIsNone(app.preview_window)
         finally:
             if root.winfo_exists():
-                root.destroy()
+                app.on_close()
 
+
+    def test_ten_wheel_events_are_coalesced_and_accumulate(self) -> None:
+        root = tk.Tk()
+        root.withdraw()
+        app = VideoImageOverlayApp(root)
+        app.original_frame = Image.new("RGB", (640, 360), "blue")
+        try:
+            root.update()
+            app._settings_ready = False
+            app._render_main()
+            surface = app.main_surface
+            calls = []
+            original_render = app._render_main
+            app._render_main = lambda: (calls.append(1), original_render())[1]
+            event = type("Event", (), {"delta": 120, "x": 320, "y": 214})()
+            for _ in range(10):
+                app._on_wheel(surface, event)
+            root.update_idletasks()
+            root.update()
+            self.assertAlmostEqual(surface.zoom, 1.06 ** 10, places=5)
+            self.assertEqual(len(calls), 1)
+        finally:
+            if root.winfo_exists():
+                app.on_close()
 
     def test_right_pan_wheel_and_magnifier(self) -> None:
         root = tk.Tk()
@@ -56,6 +80,8 @@ class GuiSmokeTests(unittest.TestCase):
             root.update()
             app._render_main()
             app._settings_ready = False
+            if app._save_after:
+                root.after_cancel(app._save_after)
             original = app.region
             surface = app.main_surface
             app._on_pan_press(surface, type("Event", (), {"x": 200, "y": 160})())

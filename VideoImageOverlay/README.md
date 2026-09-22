@@ -1,4 +1,4 @@
-# VideoImageOverlay v0.4.0
+# VideoImageOverlay v0.4.1
 
 本目录包含源码、测试、构建脚本和内置基础遮挡素材。用户的 `素材`、`替换图片`、`成品` 均保留在本目录，既不移动也不纳入 Git。
 

@@ -32,6 +32,12 @@ def preset_directory() -> Path:
     return Path(__file__).resolve().parents[1] / "assets" / "presets"
 
 
+def app_icon_path() -> Path:
+    if getattr(sys, "frozen", False):
+        return Path(getattr(sys, "_MEIPASS")) / "app_icon.ico"
+    return Path(__file__).resolve().parents[1] / "assets" / "app_icon.ico"
+
+
 def install_presets(application_directory: Path, logger: Callable[[str], None] | None = None) -> PresetInstallResult:
     write_log = logger or (lambda _: None)
     destination = application_directory / "替换图片" / "常用素材"

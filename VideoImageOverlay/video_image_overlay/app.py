@@ -12,7 +12,7 @@ from PIL import Image, ImageTk
 
 from .engine import Region, ToolResolver, VideoProcessor, extract_first_frame, scan_videos, temporary_frame_path
 from .gui_math import PreviewGeometry
-from .presets import install_presets
+from .presets import app_icon_path, install_presets
 from .settings import AppSettings, SettingsStore
 
 
@@ -40,6 +40,10 @@ class VideoImageOverlayApp(ttk.Frame):
         self._save_after: str | None = None
         self._preview_render_after: str | None = None
         self.root.title("VideoImageOverlay v0.3.0")
+        try:
+            self.root.iconbitmap(str(app_icon_path()))
+        except tk.TclError:
+            pass
         self.root.minsize(960, 780)
         self.root.geometry(f"{self.saved_settings.window_width}x{self.saved_settings.window_height}")
         self._configure_style()

@@ -10,6 +10,7 @@ from typing import Callable
 
 
 DEFAULT_REGION = (0.22, 0.23, 0.29, 0.28)
+PREVIEW_ZOOMS = {"fit", "100%", "150%", "200%"}
 
 
 @dataclass(frozen=True)
@@ -22,6 +23,9 @@ class AppSettings:
     window_width: int = 920
     window_height: int = 760
     window_state: str = "normal"
+    preview_width: int = 1280
+    preview_height: int = 800
+    preview_zoom: str = "fit"
 
     @classmethod
     def from_dict(cls, value: object) -> "AppSettings":
@@ -43,10 +47,15 @@ class AppSettings:
         mode = value.get("position_mode", "normalized")
         if mode != "normalized":
             raise ValueError("位置模式无效")
-        return cls(str(value.get("source_path", "")), str(value.get("destination_path", "")), str(value.get("image_path", "")), region, mode, width, height, state)  # type: ignore[arg-type]
+        preview_width = max(800, int(value.get("preview_width", 1280)))
+        preview_height = max(600, int(value.get("preview_height", 800)))
+        preview_zoom = str(value.get("preview_zoom", "fit"))
+        if preview_zoom not in PREVIEW_ZOOMS:
+            preview_zoom = "fit"
+        return cls(str(value.get("source_path", "")), str(value.get("destination_path", "")), str(value.get("image_path", "")), region, mode, width, height, state, preview_width, preview_height, preview_zoom)
 
     def to_dict(self) -> dict[str, object]:
-        return {"source_path": self.source_path, "destination_path": self.destination_path, "image_path": self.image_path, "region": list(self.region), "position_mode": self.position_mode, "window_width": self.window_width, "window_height": self.window_height, "window_state": self.window_state}
+        return {"source_path": self.source_path, "destination_path": self.destination_path, "image_path": self.image_path, "region": list(self.region), "position_mode": self.position_mode, "window_width": self.window_width, "window_height": self.window_height, "window_state": self.window_state, "preview_width": self.preview_width, "preview_height": self.preview_height, "preview_zoom": self.preview_zoom}
 
 
 class SettingsStore:

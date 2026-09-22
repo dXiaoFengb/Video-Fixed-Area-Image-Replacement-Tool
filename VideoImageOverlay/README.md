@@ -1,7 +1,11 @@
-# VideoImageOverlay v0.2.0
+# VideoImageOverlay v0.3.0
 
-本目录包含源码、测试和构建脚本。用户的 `素材`、`替换图片`、`成品` 均保留在本目录，既不移动也不纳入 Git。
+本目录包含源码、测试、构建脚本和内置基础遮挡素材。用户的 `素材`、`替换图片`、`成品` 均保留在本目录，既不移动也不纳入 Git。
 
-构建脚本将 PyInstaller 的工作目录与 spec 文件放入 `build/`，并把单文件交付物输出为同目录的 `VideoImageOverlay.exe`。FFmpeg、FFprobe 与许可证通过 `--add-binary`/`--add-data` 内置到 EXE。
+应用保留原有批量视频覆盖功能：只处理源目录第一层，源视频只读，输出使用同名序号规则、CPU `libx264`、CRF 18、`yuv420p` 和 faststart，音频优先复制、失败时转 AAC。
 
-`settings.json` 与 EXE 同目录，采用原子写入保存最近路径、归一化选区和窗口状态；它包含本机路径，已被 Git 忽略。
+首帧预览支持主窗口框选，以及“放大预览”独立窗口。放大窗口支持适应窗口、100%/150%/200% 缩放、Ctrl+滚轮、滚动条和 F11 全屏；Esc 只退出全屏，关闭按钮关闭预览窗口。两个窗口共享同一归一化选区。
+
+“安装常用素材”按钮会把 EXE 内置的 8 张原创遮挡 PNG 补充到 `替换图片\\常用素材`，同名文件跳过且不覆盖；安装错误只写日志和状态栏。
+
+构建脚本使用 PyInstaller `--add-binary` 内置 FFmpeg/FFprobe，使用 `--add-data` 内置 `assets/presets`，冻结运行时经 `sys._MEIPASS` 定位。中间文件位于 `build/`，最终 EXE 输出到本目录。

@@ -17,7 +17,7 @@ class SettingsTests(unittest.TestCase):
     def test_round_trip_restores_all_gui_fields_and_uses_atomic_replace(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
             store = SettingsStore(Path(raw))
-            settings = AppSettings("C:/source", "D:/output", "C:/image.png", (0.1, 0.2, 0.3, 0.4), "normalized", 1234, 876, "zoomed")
+            settings = AppSettings("C:/source", "D:/output", "C:/image.png", (0.1, 0.2, 0.3, 0.4), "normalized", 1234, 876, "zoomed", 1400, 900, "150%")
             with patch("video_image_overlay.settings.os.replace", wraps=os.replace) as replace:
                 store.save(settings)
             self.assertEqual(replace.call_count, 1)
